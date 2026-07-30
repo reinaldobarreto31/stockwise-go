@@ -1,0 +1,17 @@
+# Binaries
+stockwise-go
+/bin/
+
+# Environment
+.env
+
+# Go build cache
+*.test
+*.out
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
