@@ -1,29 +1,27 @@
-# ── Stage 1: build ───────────────────────────────────────────────────────────
-FROM golang:1.25-alpine AS builder
+# ── Builder stage ──────────────────────────────────────────────────────────────
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
-# Download dependencies first (layer cache)
+# Copy dependency manifests BEFORE the rest of the source.
+# Docker caches this layer independently — go mod download only re-runs when
+# go.mod or go.sum actually change, not on every source file edit.
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Build binary
+# Now copy the source and compile a static binary.
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o stockwise ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o stockwise ./cmd/api
 
-# ── Stage 2: run ─────────────────────────────────────────────────────────────
-FROM alpine:3.20
+# ── Runtime stage ──────────────────────────────────────────────────────────────
+FROM alpine:3.19
 
-# postgresql-client for pg_isready + psql (migrations); ca-certificates for TLS
-RUN apk add --no-cache ca-certificates postgresql-client
+RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
 COPY --from=builder /app/stockwise .
-COPY db/migrations ./db/migrations
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
 
 EXPOSE 8080
 
-ENTRYPOINT ["./entrypoint.sh"]
+CMD ["./stockwise"]

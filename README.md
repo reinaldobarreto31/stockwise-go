@@ -102,6 +102,9 @@ O Docker Compose irá:
 
 A API estará disponível em `http://localhost:8080`.
 
+> **Rebuild incremental rápido:** o `Dockerfile` copia `go.mod` e `go.sum` antes de copiar o código-fonte. Assim, o layer `go mod download` é cacheado pelo Docker e só é reexecutado quando as dependências mudam — editar qualquer arquivo `.go` recompila sem baixar módulos novamente.
+
+
 **Parar e remover os containers:**
 ```bash
 docker compose down
