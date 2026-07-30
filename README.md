@@ -3,12 +3,11 @@
 <div align="center">
 
 ![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat&logo=go&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white)
 ![JWT](https://img.shields.io/badge/JWT-Auth-000000?style=flat&logo=jsonwebtokens&logoColor=white)
-![Status](https://img.shields.io/badge/status-em%20desenvolvimento-yellow?style=flat)
+![Status](https://img.shields.io/badge/status-funcional-brightgreen?style=flat)
 
-**Sistema de controle de estoque com backend em Go e frontend React.js**
+**API RESTful de controle de estoque — Go + PostgreSQL + JWT**
 
 </div>
 
@@ -16,18 +15,17 @@
 
 ## Sobre o Projeto
 
-StockWise é um sistema de controle de estoque desenvolvido com foco em performance e simplicidade. O backend em Go expõe uma API RESTful com autenticação JWT, enquanto o frontend em React.js oferece uma interface moderna e responsiva para gestão de produtos e movimentações.
+StockWise é um sistema de controle de estoque com backend em Go puro. Expõe uma API RESTful com autenticação JWT, CRUD completo de produtos e registro transacional de movimentações de estoque (entrada/saída).
 
 ## Stack
 
 | Camada     | Tecnologia                        |
 |------------|-----------------------------------|
 | Backend    | Go 1.22 + net/http + chi          |
-| Frontend   | React 18 + Vite + Tailwind CSS    |
-| Banco      | PostgreSQL 16                     |
-| Auth       | JWT (golang-jwt/jwt)              |
-| Migrations | golang-migrate                    |
-| Container  | Docker + Docker Compose           |
+| Banco      | PostgreSQL 16 (lib/pq)            |
+| Auth       | JWT — golang-jwt/jwt v5           |
+| Senhas     | bcrypt — golang.org/x/crypto      |
+| Config     | godotenv                          |
 
 ## Arquitetura
 
@@ -35,55 +33,55 @@ StockWise é um sistema de controle de estoque desenvolvido com foco em performa
 stockwise-go/
 ├── cmd/
 │   └── api/
-│       └── main.go          # Entrypoint — HTTP server
+│       └── main.go              # Entrypoint — wiring de dependências + HTTP server
 ├── internal/
-│   ├── handler/             # HTTP handlers (controllers)
+│   ├── db/
+│   │   └── db.go                # Conexão PostgreSQL
+│   ├── handler/                 # Camada HTTP — decode, validate, encode
 │   │   ├── auth.go
 │   │   ├── product.go
-│   │   └── movement.go
-│   ├── model/               # Domain models / structs
+│   │   ├── movement.go
+│   │   └── helpers.go           # writeJSON / writeError
+│   ├── middleware/
+│   │   ├── auth.go              # Validação JWT + injeção de contexto
+│   │   └── cors.go              # CORS headers
+│   ├── model/                   # Structs de domínio
 │   │   ├── user.go
 │   │   ├── product.go
 │   │   └── movement.go
-│   ├── repository/          # Data access layer (PostgreSQL)
+│   ├── repository/              # Camada de dados — SQL puro (lib/pq)
 │   │   ├── user.go
 │   │   ├── product.go
 │   │   └── movement.go
-│   └── service/             # Business logic
+│   └── service/                 # Regras de negócio
 │       ├── auth.go
 │       ├── product.go
 │       └── movement.go
 ├── db/
-│   └── migrations/          # SQL migration files
+│   └── migrations/              # SQL migrations (aplicar em ordem)
+│       ├── 001_create_users.sql
+│       ├── 002_create_products.sql
+│       └── 003_create_movements.sql
+├── .env.example
 ├── go.mod
-├── go.sum
-└── README.md
+└── go.sum
 ```
 
 ### Fluxo de dados
 
 ```
-Client (React) → HTTP Request → Handler → Service → Repository → PostgreSQL
-                                       ↑
-                              JWT Middleware
+Client → HTTP → Middleware (JWT/CORS) → Handler → Service → Repository → PostgreSQL
 ```
 
-## Funcionalidades Planejadas
+## Funcionalidades Implementadas
 
-### MVP (v1.0)
-- [x] Estrutura base do projeto
-- [ ] Autenticação JWT (login, registro, refresh token)
-- [ ] CRUD completo de produtos (nome, SKU, categoria, preço, estoque)
-- [ ] Registro de movimentações (entrada / saída)
-- [ ] Alertas de estoque mínimo
-- [ ] Dashboard com resumo de estoque
-
-### v2.0
-- [ ] Relatórios em PDF/Excel
-- [ ] Multi-tenant (múltiplas empresas)
-- [ ] Histórico de preços
-- [ ] API de fornecedores
-- [ ] Frontend React completo
+- [x] Registro e login de usuários com bcrypt + JWT
+- [x] CRUD completo de produtos (GET, POST, PUT, DELETE)
+- [x] Movimentações de estoque — entrada e saída com validação de saldo
+- [x] Atualização atômica do estoque (transação SQL)
+- [x] Middleware JWT: rotas protegidas vs. públicas
+- [x] Middleware CORS
+- [x] Migrations SQL prontas para uso
 
 ## Rodando localmente
 
@@ -91,33 +89,25 @@ Client (React) → HTTP Request → Handler → Service → Repository → Postg
 
 - Go 1.22+
 - PostgreSQL 16+
-- Docker (opcional)
 
-### Com Docker Compose
+### Passos
 
 ```bash
 # Clonar o repositório
 git clone https://github.com/reinaldobarreto31/stockwise-go.git
 cd stockwise-go
 
-# Subir banco e aplicação
-docker compose up -d
-```
-
-### Sem Docker
-
-```bash
-# Instalar dependências
-go mod download
-
 # Configurar variáveis de ambiente
 cp .env.example .env
-# Editar .env com suas credenciais PostgreSQL
+# Edite .env com suas credenciais PostgreSQL
 
-# Executar migrations
-# (em breve — usando golang-migrate)
+# Aplicar migrations (na ordem)
+psql $DATABASE_URL -f db/migrations/001_create_users.sql
+psql $DATABASE_URL -f db/migrations/002_create_products.sql
+psql $DATABASE_URL -f db/migrations/003_create_movements.sql
 
-# Rodar a API
+# Baixar dependências e rodar
+go mod download
 go run cmd/api/main.go
 ```
 
@@ -130,7 +120,7 @@ A API estará disponível em `http://localhost:8080`.
 DATABASE_URL=postgres://user:password@localhost:5432/stockwise?sslmode=disable
 
 # JWT
-JWT_SECRET=sua-chave-secreta-aqui
+JWT_SECRET=sua-chave-secreta-de-pelo-menos-32-caracteres
 JWT_EXPIRATION_HOURS=24
 
 # Servidor
@@ -138,29 +128,66 @@ PORT=8080
 ENV=development
 ```
 
-## Endpoints (planejados)
+## Endpoints
 
-### Auth
-| Método | Rota              | Descrição            |
-|--------|-------------------|----------------------|
-| POST   | `/api/auth/login` | Login do usuário     |
-| POST   | `/api/auth/register` | Registro         |
-| POST   | `/api/auth/refresh` | Refresh token     |
+### Público
 
-### Produtos
-| Método | Rota                  | Descrição             |
-|--------|-----------------------|-----------------------|
-| GET    | `/api/products`       | Listar produtos       |
-| GET    | `/api/products/:id`   | Buscar produto        |
-| POST   | `/api/products`       | Criar produto         |
-| PUT    | `/api/products/:id`   | Atualizar produto     |
-| DELETE | `/api/products/:id`   | Remover produto       |
+| Método | Rota    | Descrição     |
+|--------|---------|---------------|
+| GET    | `/health` | Health check |
 
-### Movimentações
-| Método | Rota                    | Descrição               |
-|--------|-------------------------|-------------------------|
-| GET    | `/api/movements`        | Listar movimentações    |
-| POST   | `/api/movements`        | Registrar movimentação  |
+### Auth (público)
+
+| Método | Rota                  | Descrição              |
+|--------|-----------------------|------------------------|
+| POST   | `/api/auth/register`  | Registrar novo usuário |
+| POST   | `/api/auth/login`     | Login — retorna JWT    |
+
+### Produtos (requer `Authorization: Bearer <token>`)
+
+| Método | Rota                    | Descrição           |
+|--------|-------------------------|---------------------|
+| GET    | `/api/products`         | Listar produtos     |
+| GET    | `/api/products/{id}`    | Buscar por ID       |
+| POST   | `/api/products`         | Criar produto       |
+| PUT    | `/api/products/{id}`    | Atualizar produto   |
+| DELETE | `/api/products/{id}`    | Remover produto     |
+
+### Movimentações (requer `Authorization: Bearer <token>`)
+
+| Método | Rota                              | Descrição                     |
+|--------|-----------------------------------|-------------------------------|
+| GET    | `/api/movements`                  | Listar todas as movimentações |
+| GET    | `/api/movements?product_id={id}`  | Filtrar por produto           |
+| POST   | `/api/movements`                  | Registrar movimentação        |
+
+### Exemplo — Registro
+
+```bash
+curl -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"João","email":"joao@exemplo.com","password":"senha123"}'
+```
+
+### Exemplo — Criar produto (autenticado)
+
+```bash
+TOKEN="<jwt-retornado-no-login>"
+
+curl -X POST http://localhost:8080/api/products \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Teclado Mecânico","sku":"TEC-001","category":"Periféricos","price":349.90,"stock":20,"min_stock":5}'
+```
+
+### Exemplo — Registrar entrada de estoque
+
+```bash
+curl -X POST http://localhost:8080/api/movements \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"product_id":1,"type":"in","quantity":50,"note":"Compra inicial"}'
+```
 
 ## Autor
 
@@ -168,4 +195,4 @@ ENV=development
 
 ---
 
-> Projeto em desenvolvimento ativo. Em breve com frontend React e documentação Swagger.
+> Próximos passos: Docker Compose, documentação Swagger, frontend React.

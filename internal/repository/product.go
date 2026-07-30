@@ -73,6 +73,31 @@ func (r *ProductRepository) Create(input model.CreateProductInput) (*model.Produ
 	return &p, err
 }
 
+// Update applies partial field changes to a product and returns the updated record.
+func (r *ProductRepository) Update(id int64, input model.UpdateProductInput) (*model.Product, error) {
+	var p model.Product
+	err := r.db.QueryRow(`
+		UPDATE products
+		SET
+			name        = COALESCE($1, name),
+			category    = COALESCE($2, category),
+			description = COALESCE($3, description),
+			price       = COALESCE($4, price),
+			min_stock   = COALESCE($5, min_stock),
+			updated_at  = NOW()
+		WHERE id = $6
+		RETURNING id, name, sku, category, description, price, stock, min_stock, created_at, updated_at
+	`, input.Name, input.Category, input.Description, input.Price, input.MinStock, id,
+	).Scan(
+		&p.ID, &p.Name, &p.SKU, &p.Category, &p.Description,
+		&p.Price, &p.Stock, &p.MinStock, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // Delete removes a product by ID.
 func (r *ProductRepository) Delete(id int64) error {
 	_, err := r.db.Exec(`DELETE FROM products WHERE id = $1`, id)

@@ -7,8 +7,14 @@ import (
 	"os"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
+
+	"github.com/reinaldobarreto31/stockwise-go/internal/db"
+	"github.com/reinaldobarreto31/stockwise-go/internal/handler"
+	"github.com/reinaldobarreto31/stockwise-go/internal/middleware"
+	"github.com/reinaldobarreto31/stockwise-go/internal/repository"
+	"github.com/reinaldobarreto31/stockwise-go/internal/service"
 )
 
 func main() {
@@ -22,31 +28,62 @@ func main() {
 		port = "8080"
 	}
 
+	// Database
+	database, err := db.Connect()
+	if err != nil {
+		log.Fatalf("database connection failed: %v", err)
+	}
+	defer database.Close()
+	log.Println("Connected to PostgreSQL")
+
+	// Repositories
+	userRepo := repository.NewUserRepository(database)
+	productRepo := repository.NewProductRepository(database)
+	movementRepo := repository.NewMovementRepository(database)
+
+	// Services
+	authSvc := service.NewAuthService(userRepo)
+	productSvc := service.NewProductService(productRepo)
+	movementSvc := service.NewMovementService(movementRepo, productRepo)
+
+	// Handlers
+	authHandler := handler.NewAuthHandler(authSvc)
+	productHandler := handler.NewProductHandler(productSvc)
+	movementHandler := handler.NewMovementHandler(movementSvc)
+
+	// Router
 	r := chi.NewRouter()
 
-	// Middleware
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
+	// Global middleware
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.RequestID)
+	r.Use(middleware.CORS)
 
-	// Health check
+	// Health check (public)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"status":"ok","service":"stockwise-go"}`)
 	})
 
-	// API routes (v1)
+	// API v1
 	r.Route("/api", func(r chi.Router) {
+		// Public info
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{"message":"StockWise API","version":"1.0.0"}`)
 		})
 
-		// TODO: mount auth, product and movement handlers
-		// r.Mount("/auth",      handler.AuthRouter(authSvc))
-		// r.Mount("/products",  handler.ProductRouter(productSvc))
-		// r.Mount("/movements", handler.MovementRouter(movementSvc))
+		// Auth routes — public
+		r.Mount("/auth", authHandler.Router())
+
+		// Protected routes — require valid JWT
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.JWTAuth)
+			r.Mount("/products", productHandler.Router())
+			r.Mount("/movements", movementHandler.Router())
+		})
 	})
 
 	addr := ":" + port
