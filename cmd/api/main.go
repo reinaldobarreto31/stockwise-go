@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,43 @@ import (
 	"github.com/reinaldobarreto31/stockwise-go/internal/repository"
 	"github.com/reinaldobarreto31/stockwise-go/internal/service"
 )
+
+//go:embed docs/openapi.yaml
+var openapiSpec []byte
+
+// swaggerUIHTML returns a self-contained Swagger UI page that loads the spec
+// from /docs/openapi.yaml via the official CDN bundle.
+func swaggerUIHTML() string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StockWise API — Interactive Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
+  <style>
+    body { margin: 0; }
+    #swagger-ui .topbar { display: none; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: "openapi.yaml",
+      dom_id: "#swagger-ui",
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+      layout: "StandaloneLayout",
+      deepLinking: true,
+      tryItOutEnabled: true,
+      requestSnippetsEnabled: true,
+    });
+  </script>
+</body>
+</html>`
+}
 
 func main() {
 	// Load .env in development
@@ -67,6 +105,22 @@ func main() {
 		fmt.Fprintf(w, `{"status":"ok","service":"stockwise-go"}`)
 	})
 
+	// Swagger UI — GET /docs  (redirect bare path to ensure trailing resources resolve)
+	r.Get("/docs", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/docs/", http.StatusMovedPermanently)
+	})
+	r.Get("/docs/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, swaggerUIHTML())
+	})
+
+	// OpenAPI spec — GET /docs/openapi.yaml
+	r.Get("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		w.Header().Set("Content-Disposition", "inline; filename=\"openapi.yaml\"")
+		w.Write(openapiSpec)
+	})
+
 	// API v1
 	r.Route("/api", func(r chi.Router) {
 		// Public info
@@ -88,6 +142,7 @@ func main() {
 
 	addr := ":" + port
 	log.Printf("StockWise API listening on %s", addr)
+	log.Printf("Swagger UI available at http://localhost%s/docs/", addr)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
