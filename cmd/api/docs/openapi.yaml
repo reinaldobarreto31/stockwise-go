@@ -1,0 +1,683 @@
+openapi: 3.0.3
+info:
+  title: StockWise API
+  description: |
+    Inventory management REST API built with Go, PostgreSQL, and JWT authentication.
+
+    **Quick start:**
+    1. Register a user via `POST /api/auth/register`
+    2. Login via `POST /api/auth/login` to receive a JWT token
+    3. Click **Authorize** (top-right), paste the token as `Bearer <token>`, then try any protected endpoint
+  version: 1.0.0
+  contact:
+    name: Reinaldo Barreto
+    url: https://github.com/reinaldobarreto31/stockwise-go
+
+servers:
+  - url: /
+    description: Current server
+
+tags:
+  - name: Health
+    description: Service health check
+  - name: Auth
+    description: Registration and login
+  - name: Products
+    description: Inventory product catalogue (JWT required)
+  - name: Movements
+    description: Stock-in / stock-out movements (JWT required)
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns `ok` when the service is running.
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                service: stockwise-go
+
+  /api:
+    get:
+      tags: [Health]
+      summary: API info
+      description: Returns the API name and current version.
+      operationId: apiInfo
+      responses:
+        "200":
+          description: API metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiInfoResponse"
+              example:
+                message: StockWise API
+                version: 1.0.0
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      description: Creates a new user account and returns a JWT token.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+            example:
+              name: Jane Smith
+              email: jane@example.com
+              password: secret123
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: email already registered
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: Authenticates a user and returns a JWT token valid for 24 hours.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+            example:
+              email: jane@example.com
+              password: secret123
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                user:
+                  id: 1
+                  name: Jane Smith
+                  email: jane@example.com
+                  role: operator
+                  created_at: "2024-01-15T10:30:00Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid email or password
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/products:
+    get:
+      tags: [Products]
+      summary: List all products
+      description: Returns all products in the catalogue. Requires JWT.
+      operationId: listProducts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Array of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+              example:
+                - id: 1
+                  name: Wireless Mouse
+                  sku: WM-001
+                  category: Electronics
+                  description: Ergonomic wireless mouse
+                  price: 29.99
+                  stock: 150
+                  min_stock: 20
+                  created_at: "2024-01-15T10:00:00Z"
+                  updated_at: "2024-01-15T10:00:00Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Products]
+      summary: Create a product
+      description: Adds a new product to the catalogue. Requires JWT.
+      operationId: createProduct
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductInput"
+            example:
+              name: Wireless Mouse
+              sku: WM-001
+              category: Electronics
+              description: Ergonomic wireless mouse
+              price: 29.99
+              stock: 150
+              min_stock: 20
+      responses:
+        "201":
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProductId"
+
+    get:
+      tags: [Products]
+      summary: Get a product
+      description: Returns a single product by ID. Requires JWT.
+      operationId: getProduct
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      tags: [Products]
+      summary: Update a product
+      description: |
+        Partially updates a product. Only the fields you include are changed.
+        SKU is immutable after creation. Requires JWT.
+      operationId: updateProduct
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductInput"
+            example:
+              price: 24.99
+              min_stock: 30
+      responses:
+        "200":
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [Products]
+      summary: Delete a product
+      description: Removes a product from the catalogue. Requires JWT.
+      operationId: deleteProduct
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Product deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/movements:
+    get:
+      tags: [Movements]
+      summary: List movements
+      description: |
+        Returns inventory movements. Optionally filter by `product_id`.
+        Requires JWT.
+      operationId: listMovements
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: product_id
+          in: query
+          description: Filter movements for a specific product
+          required: false
+          schema:
+            type: integer
+            format: int64
+            example: 1
+      responses:
+        "200":
+          description: Array of movements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Movement"
+              example:
+                - id: 1
+                  product_id: 1
+                  type: in
+                  quantity: 50
+                  note: Initial stock
+                  created_at: "2024-01-15T10:05:00Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Movements]
+      summary: Record a movement
+      description: |
+        Records a stock-in (`in`) or stock-out (`out`) movement.
+        Outbound movements fail with `422` if the product has insufficient stock.
+        Requires JWT.
+      operationId: createMovement
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMovementInput"
+            examples:
+              stockIn:
+                summary: Receive 50 units
+                value:
+                  product_id: 1
+                  type: in
+                  quantity: 50
+                  note: Supplier delivery
+              stockOut:
+                summary: Ship 10 units
+                value:
+                  product_id: 1
+                  type: out
+                  quantity: 10
+                  note: Order #4821
+      responses:
+        "201":
+          description: Movement recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Validation error or insufficient stock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                validation:
+                  value:
+                    error: quantity must be greater than zero
+                insufficientStock:
+                  value:
+                    error: insufficient stock for outbound movement
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from `POST /api/auth/login`.
+        Paste the token value (without "Bearer ") into the field below.
+
+  parameters:
+    ProductId:
+      name: id
+      in: path
+      required: true
+      description: Numeric product ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+
+  responses:
+    BadRequest:
+      description: Bad request — malformed JSON or missing required fields
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: invalid request body
+    Unauthorized:
+      description: Missing or invalid JWT token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: unauthorized
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: product not found
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: name is required
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: internal server error
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: stockwise-go
+
+    ApiInfoResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: StockWise API
+        version:
+          type: string
+          example: 1.0.0
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: something went wrong
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Jane Smith
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        role:
+          type: string
+          enum: [admin, operator]
+          example: operator
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    RegisterInput:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          example: Jane Smith
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        password:
+          type: string
+          minLength: 8
+          example: secret123
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        password:
+          type: string
+          example: secret123
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT bearer token (valid 24 h)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: "#/components/schemas/User"
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Wireless Mouse
+        sku:
+          type: string
+          example: WM-001
+        category:
+          type: string
+          example: Electronics
+        description:
+          type: string
+          example: Ergonomic wireless mouse
+        price:
+          type: number
+          format: float
+          example: 29.99
+        stock:
+          type: integer
+          example: 150
+        min_stock:
+          type: integer
+          example: 20
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:00:00Z"
+
+    CreateProductInput:
+      type: object
+      required: [name, sku]
+      properties:
+        name:
+          type: string
+          example: Wireless Mouse
+        sku:
+          type: string
+          example: WM-001
+        category:
+          type: string
+          example: Electronics
+        description:
+          type: string
+          example: Ergonomic wireless mouse
+        price:
+          type: number
+          format: float
+          example: 29.99
+        stock:
+          type: integer
+          example: 0
+        min_stock:
+          type: integer
+          example: 20
+
+    UpdateProductInput:
+      type: object
+      description: All fields are optional; only included fields are updated. SKU cannot be changed.
+      properties:
+        name:
+          type: string
+          example: Wireless Mouse Pro
+        category:
+          type: string
+          example: Peripherals
+        description:
+          type: string
+          example: Ergonomic wireless mouse with USB-C
+        price:
+          type: number
+          format: float
+          example: 24.99
+        min_stock:
+          type: integer
+          example: 30
+
+    Movement:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        product_id:
+          type: integer
+          format: int64
+          example: 1
+        type:
+          type: string
+          enum: [in, out]
+          example: in
+        quantity:
+          type: integer
+          example: 50
+        note:
+          type: string
+          example: Initial stock
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:05:00Z"
+
+    CreateMovementInput:
+      type: object
+      required: [product_id, type, quantity]
+      properties:
+        product_id:
+          type: integer
+          format: int64
+          example: 1
+        type:
+          type: string
+          enum: [in, out]
+          example: in
+        quantity:
+          type: integer
+          minimum: 1
+          example: 50
+        note:
+          type: string
+          example: Supplier delivery
