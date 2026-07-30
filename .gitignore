@@ -4,6 +4,7 @@ stockwise-go
 
 # Environment
 .env
+.env.docker
 
 # Go build cache
 *.test

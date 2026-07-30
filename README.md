@@ -87,7 +87,11 @@ Client → HTTP → Middleware (JWT/CORS) → Handler → Service → Repository
 git clone https://github.com/reinaldobarreto31/stockwise-go.git
 cd stockwise-go
 
-# 2. Subir tudo com um comando
+# 2. Configurar variáveis de ambiente
+cp .env.docker.example .env.docker
+# Edite .env.docker se precisar alterar a senha padrão
+
+# 3. Subir tudo com um comando
 docker compose up --build
 ```
 

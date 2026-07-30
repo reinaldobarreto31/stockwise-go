@@ -5,10 +5,7 @@ services:
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_DB:       stockwise
-      POSTGRES_USER:     postgres
-      POSTGRES_PASSWORD: password
+    env_file: .env.docker
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -25,16 +22,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      DATABASE_URL:           postgres://postgres:password@postgres:5432/stockwise?sslmode=disable
-      JWT_SECRET:             dev-secret-change-in-production-at-least-32-chars
-      JWT_EXPIRATION_HOURS:   "24"
-      PORT:                   "8080"
-      ENV:                    development
-      # Used by entrypoint.sh to probe readiness
-      DB_HOST:                postgres
-      DB_PORT:                "5432"
-      DB_USER:                postgres
+    env_file: .env.docker
     ports:
       - "8080:8080"
     restart: on-failure
