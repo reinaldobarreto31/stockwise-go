@@ -5,6 +5,7 @@
 ![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat&logo=go&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white)
 ![JWT](https://img.shields.io/badge/JWT-Auth-000000?style=flat&logo=jsonwebtokens&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)
 ![Status](https://img.shields.io/badge/status-funcional-brightgreen?style=flat)
 
 **API RESTful de controle de estoque — Go + PostgreSQL + JWT**
@@ -26,6 +27,7 @@ StockWise é um sistema de controle de estoque com backend em Go puro. Expõe um
 | Auth       | JWT — golang-jwt/jwt v5           |
 | Senhas     | bcrypt — golang.org/x/crypto      |
 | Config     | godotenv                          |
+| Container  | Docker + Docker Compose           |
 
 ## Arquitetura
 
@@ -62,6 +64,9 @@ stockwise-go/
 │       ├── 001_create_users.sql
 │       ├── 002_create_products.sql
 │       └── 003_create_movements.sql
+├── Dockerfile                   # Multi-stage build (builder + alpine runner)
+├── docker-compose.yml           # Go API + PostgreSQL — sobe tudo com um comando
+├── entrypoint.sh                # Aguarda o banco, aplica migrations, inicia a API
 ├── .env.example
 ├── go.mod
 └── go.sum
@@ -73,17 +78,37 @@ stockwise-go/
 Client → HTTP → Middleware (JWT/CORS) → Handler → Service → Repository → PostgreSQL
 ```
 
-## Funcionalidades Implementadas
+## 🐳 Getting Started — Docker (recomendado)
 
-- [x] Registro e login de usuários com bcrypt + JWT
-- [x] CRUD completo de produtos (GET, POST, PUT, DELETE)
-- [x] Movimentações de estoque — entrada e saída com validação de saldo
-- [x] Atualização atômica do estoque (transação SQL)
-- [x] Middleware JWT: rotas protegidas vs. públicas
-- [x] Middleware CORS
-- [x] Migrations SQL prontas para uso
+> Requer apenas **Docker** e **Docker Compose**. Sem Go, sem PostgreSQL, sem configuração manual.
 
-## Rodando localmente
+```bash
+# 1. Clonar o repositório
+git clone https://github.com/reinaldobarreto31/stockwise-go.git
+cd stockwise-go
+
+# 2. Subir tudo com um comando
+docker compose up --build
+```
+
+O Docker Compose irá:
+1. Subir o PostgreSQL 16 e aguardar ele ficar saudável
+2. Aplicar automaticamente as 3 migrations SQL
+3. Iniciar a API Go na porta **8080**
+
+A API estará disponível em `http://localhost:8080`.
+
+**Parar e remover os containers:**
+```bash
+docker compose down
+```
+
+**Parar e remover os containers + dados do banco:**
+```bash
+docker compose down -v
+```
+
+## Rodando localmente (sem Docker)
 
 ### Pré-requisitos
 
@@ -111,8 +136,6 @@ go mod download
 go run cmd/api/main.go
 ```
 
-A API estará disponível em `http://localhost:8080`.
-
 ## Variáveis de Ambiente
 
 ```env
@@ -128,71 +151,77 @@ PORT=8080
 ENV=development
 ```
 
+> No Docker Compose essas variáveis já estão configuradas automaticamente.
+
 ## Endpoints
 
 ### Público
 
-| Método | Rota    | Descrição     |
-|--------|---------|---------------|
-| GET    | `/health` | Health check |
+| Método | Rota      | Descrição     |
+|--------|-----------|---------------|
+| GET    | `/health` | Health check  |
+| GET    | `/api`    | Info da API   |
 
 ### Auth (público)
 
+| Método | Rota               | Descrição           |
+|--------|--------------------|---------------------|
+| POST   | `/api/auth/register` | Cadastro de usuário |
+| POST   | `/api/auth/login`    | Login — retorna JWT |
+
+### Produtos (requer JWT)
+
 | Método | Rota                  | Descrição              |
 |--------|-----------------------|------------------------|
-| POST   | `/api/auth/register`  | Registrar novo usuário |
-| POST   | `/api/auth/login`     | Login — retorna JWT    |
+| GET    | `/api/products`       | Listar produtos        |
+| POST   | `/api/products`       | Criar produto          |
+| GET    | `/api/products/{id}`  | Buscar produto por ID  |
+| PUT    | `/api/products/{id}`  | Atualizar produto      |
+| DELETE | `/api/products/{id}`  | Remover produto        |
 
-### Produtos (requer `Authorization: Bearer <token>`)
+### Movimentações (requer JWT)
 
-| Método | Rota                    | Descrição           |
-|--------|-------------------------|---------------------|
-| GET    | `/api/products`         | Listar produtos     |
-| GET    | `/api/products/{id}`    | Buscar por ID       |
-| POST   | `/api/products`         | Criar produto       |
-| PUT    | `/api/products/{id}`    | Atualizar produto   |
-| DELETE | `/api/products/{id}`    | Remover produto     |
+| Método | Rota                    | Descrição                    |
+|--------|-------------------------|------------------------------|
+| GET    | `/api/movements`        | Listar movimentações         |
+| POST   | `/api/movements`        | Registrar entrada ou saída   |
+| GET    | `/api/movements/{id}`   | Buscar movimentação por ID   |
 
-### Movimentações (requer `Authorization: Bearer <token>`)
-
-| Método | Rota                              | Descrição                     |
-|--------|-----------------------------------|-------------------------------|
-| GET    | `/api/movements`                  | Listar todas as movimentações |
-| GET    | `/api/movements?product_id={id}`  | Filtrar por produto           |
-| POST   | `/api/movements`                  | Registrar movimentação        |
-
-### Exemplo — Registro
+### Exemplo rápido
 
 ```bash
-curl -X POST http://localhost:8080/api/auth/register \
+# Health check
+curl http://localhost:8080/health
+
+# Registrar usuário
+curl -s -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"João","email":"joao@exemplo.com","password":"senha123"}'
-```
+  -d '{"name":"Test User","email":"test@example.com","password":"secret123"}'
 
-### Exemplo — Criar produto (autenticado)
+# Login — guarde o token retornado
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"secret123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 
-```bash
-TOKEN="<jwt-retornado-no-login>"
-
-curl -X POST http://localhost:8080/api/products \
+# Criar produto (requer JWT)
+curl -s -X POST http://localhost:8080/api/products \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Teclado Mecânico","sku":"TEC-001","category":"Periféricos","price":349.90,"stock":20,"min_stock":5}'
+  -d '{"name":"Notebook","sku":"NB-001","category":"Electronics","price":2999.99,"stock":10}'
 ```
 
-### Exemplo — Registrar entrada de estoque
+## Funcionalidades Implementadas
 
-```bash
-curl -X POST http://localhost:8080/api/movements \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"product_id":1,"type":"in","quantity":50,"note":"Compra inicial"}'
-```
+- [x] Registro e login de usuários com bcrypt + JWT
+- [x] CRUD completo de produtos (GET, POST, PUT, DELETE)
+- [x] Movimentações de estoque — entrada e saída com validação de saldo
+- [x] Atualização atômica do estoque (transação SQL)
+- [x] Middleware JWT: rotas protegidas vs. públicas
+- [x] Middleware CORS
+- [x] Migrations SQL prontas para uso
+- [x] Docker + Docker Compose (sobe tudo com um comando)
+- [x] Multi-stage Dockerfile (imagem final ~20 MB)
 
-## Autor
+## Licença
 
-**Reinaldo Barreto** — [github.com/reinaldobarreto31](https://github.com/reinaldobarreto31)
-
----
-
-> Próximos passos: Docker Compose, documentação Swagger, frontend React.
+MIT
